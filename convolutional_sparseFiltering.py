@@ -55,7 +55,7 @@ def pool(poolDim, convolvedFeatures):
 def get_sparseFilter(numFeatures, patches, patchesFile, maxiter=100):
     try:
         # added maxiter to filename 24/02/15
-        sf_file = "/Users/dew/development/PS1-Real-Bogus/ufldl/sparsefiltering/trained_sparseFilters/SF_%d_%s_maxiter%d.mat" % \
+        sf_file = "trained_sparseFilters/SF_%d_%s_maxiter%d.mat" % \
         (numFeatures, patchesFile.split("/")[-1].split(".")[0], maxiter)
         print sf_file
         SF = SparseFilter(saveFile=sf_file)
