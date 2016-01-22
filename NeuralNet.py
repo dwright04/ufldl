@@ -997,7 +997,7 @@ class SoftMaxClassifier(NeuralNet):
     """
     def __init__(self, input, targets, LAMBDA=0.0, maxiter=100, saveFile=None):
         architecture = {}
-        NeuralNet.__init__(self, input, targets, architecture, LAMBDA, True, maxiter, saveFile)
+        NeuralNet.__init__(self, input, targets, architecture, LAMBDA, classify=True, maxiter=maxiter, saveFile=saveFile)
         self._indicatorFunction = self.labelsToIndicatorFunction(self._targets)
         self._architecture = {0:np.shape(self._input)[0]-1, 1:np.shape(self._indicatorFunction)[0]}
 
