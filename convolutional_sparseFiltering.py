@@ -530,11 +530,11 @@ def main():
         #train_linearSVM(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, \
         #                sgd, save=True, prefix="")
     
-        train_SoftMaxOnline(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, \
-                            sgd, save=True, prefix="")
+        #train_SoftMaxOnline(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, \
+        #                    sgd, save=True, prefix="")
 
-        #train_Softmax(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, \
-        #        sgd, save=True, prefix="")
+        train_Softmax(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, \
+                      sgd, save=True, prefix="")
 
     elif cv == True:
         trainImages, trainLabels, numTrainImages,\
