@@ -82,6 +82,55 @@ class convolve_and_pool_task(multiprocessingUtils.Task):
     def __str__(self):
         return 'Step %d: features %d to %d\n'% (self.convPart, self.featureStart, self.featureEnd)
 
+class convolve_and_pool_task(multiprocessingUtils.Task):
+     def __init__(self, convPart, patchDim, poolDim, stepSize, trainImages, testImages, W):
+         self.convPart = convPart
+         self.patchDim = patchDim
+         self.poolDim = poolDim
+         self.stepSize = stepSize
+         self.trainImages = trainImages
+         self.testImages = testImages
+         self.W = W
+         
+         self.featureStart = self.convPart*self.stepSize
+         self.featureEnd = (self.convPart+1)*self.stepSize
+     
+     def __call__(self):
+         Wt = self.W[self.featureStart:self.featureEnd, :]
+         convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.trainImages, Wt)
+         pooledFeaturesThisTrain = pool(self.poolDim, convolvedFeaturesThis)
+         if np.any(self.testImages):
+             print 'Convolving and pooling test images\n'
+             convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.testImages, Wt)
+             pooledFeaturesThisTest = pool(self.poolDim, convolvedFeaturesThis)
+         return pooledFeaturesThisTrain, pooledFeaturesThisTest, self.featureStart, self.featureEnd
+         
+     def __str__(self):
+         return 'Step %d: features %d to %d\n'% (self.convPart, self.featureStart, self.featureEnd)
+ 
+ 
+ def convolve(patchDim, numFeatures, images, W):
+     m = np.shape(images)[3]
+     imageDim = np.shape(images)[0]
+     imageChannels = np.shape(images)[2]
+     convolvedFeatures = np.zeros((numFeatures, m, \
+                         imageDim - patchDim + 1, imageDim - patchDim + 1))
+     for imageNum in range(m):
+         for featureNum in range(numFeatures):
+             convolvedImage = np.zeros((imageDim - patchDim + 1, imageDim - patchDim + 1))
+             for channel in range(imageChannels):
+                 feature = np.zeros((patchDim, patchDim))
+                 start = channel * patchDim*patchDim
+                 stop = start + patchDim*patchDim
+                 feature += np.reshape(W[featureNum, start:stop], (patchDim, patchDim), order="F")
+                 feature = np.flipud(np.fliplr(feature))
+                 im = images[:, :, channel, imageNum]
+                 convolvedImage += sig.convolve2d(im, feature, "valid")
+             # sparse filtering activation function
+             convolvedImage = np.sqrt(1e-8 + np.multiply(convolvedImage, convolvedImage))
+             convolvedFeatures[featureNum, imageNum, :, :] = convolvedImage
+     return convolvedFeatures
+
 def pool(poolDim, convolvedFeatures):
     numImages = np.shape(convolvedFeatures)[1]
     numFeatures = np.shape(convolvedFeatures)[0]
