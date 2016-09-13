@@ -11,6 +11,9 @@ from NeuralNet import SoftMaxClassifier
 from sklearn.metrics import roc_curve
 from sklearn import preprocessing
 
+from multiprocessing import sharedctypes
+from numpy import ctypeslib
+
 def one_percent_mdr(y, pred):
     fpr, tpr, thresholds = roc_curve(y, pred)
     FoM = fpr[np.where(1-tpr<=0.01)[0][0]] # FPR at 1% MDR
@@ -27,16 +30,16 @@ class train_SoftMax_task(multiprocessingUtils.Task):
     def __init__(self, C, fold, X, Y, testX, testY, fom_func=one_percent_mdr):
         self.C = C
         self.fold = fold
-        self.X = X
-        self.Y = Y
-        self.testX = testX
-        self.testY = testY
+        self.X = self.to_numpy_array(X)
+        self.Y = self.to_numpy_array(Y)
+        self.testX = self.to_numpy_array(testX)
+        self.testY = self.to_numpy_array(testY)
         self.fom_func = fom_func
 
     def __call__(self):
-        clf = SoftMaxClassifier(self.X.T, self.Y, LAMBDA=self.C, maxiter=10000)
+        clf = SoftMaxClassifier(self.X, self.Y, LAMBDA=self.C, maxiter=10000)
         clf.train()
-        pred = clf.predict(self.testX.T).T
+        pred = clf.predict(self.testX).T
         indices = np.argmax(pred, axis=1)
         pred = np.max(pred, axis=1)
         pred[indices==0] = 1 - pred[indices==0]
@@ -46,6 +49,11 @@ class train_SoftMax_task(multiprocessingUtils.Task):
 
     def __str__(self):
         return "Training Softmax Classifier with LAMBDA=%e" % (self.C)
+
+    def to_numpy_array(self, S):
+        S_numpy = ctypeslib.as_array(S[0])
+        S_numpy.shape = S[1]
+        return S_numpy
 
 class convolve_and_pool_task(multiprocessingUtils.Task):
 
@@ -73,142 +81,6 @@ class convolve_and_pool_task(multiprocessingUtils.Task):
         
     def __str__(self):
         return 'Step %d: features %d to %d\n'% (self.convPart, self.featureStart, self.featureEnd)
-
-class load_data_task(multiprocessingUtils.Task):
-
-    def __init__(self, dataFile, imageDim, pooledFeaturesTrain, pooledFeaturesTest):
-        self.dataFile = dataFile
-        self.imageDim = imageDim
-        self.pooledFeaturesTrain = pooledFeaturesTrain
-        self.pooledFeaturesTest  = pooledFeaturesTest
-        
-    def __call__(self):
-        trainImages, trainLabels, numTrainImages,\
-        testImages, testLabels, numTestImages = self.load_data()
-        
-        trainImages = None
-        testImages  = None
-        
-        X = np.transpose(self.pooledFeaturesTrain, (0,2,3,1))
-        X = np.reshape(X, (int((self.pooledFeaturesTrain.size)/float(numTrainImages)), \
-                       numTrainImages), order="F")
-        self.pooledFeaturesTrain = None
-        # MinMax scaling removed 11-03-2015
-        scaler = preprocessing.MinMaxScaler()
-        scaler.fit(X.T)  # Don't cheat - fit only on training data
-        X = scaler.transform(X.T)
-        Y = np.squeeze(trainLabels)
-        
-
-        testX = np.transpose(self.pooledFeaturesTest, (0,2,3,1))
-        testX = np.reshape(testX, (int((self.pooledFeaturesTest.size)/float(numTestImages)), \
-                           numTestImages), order="F")
-        self.pooledFeaturesTest = None
-        # MinMax scaling removed 11-03-2015
-        testX = scaler.transform(testX.T)
-        testY = np.squeeze(testLabels)
-
-        trainLabels = None
-        testLabels  = None
-
-        return X, Y, testX, testY
-
-    def __str__(self):
-        return "Loading data set from : %s" % self.dataFile
-
-    def load_data(self):
-        """
-            currently only works for single channel images
-
-            2 feb 2015:
-                added imageDim argument to fix hard coding
-                image dimensions.
-        """
-        try:
-            data = sio.loadmat(self.dataFile)
-        except IOError:
-            print "[!] Exiting: could not open patches file - %s" % patchesFile
-            exit(0)
-    
-        #data = sio.loadmat(self.dataFile)
-        try:
-            X = np.concatenate((data["X"], data["validX"]))
-            y = np.concatenate((data["y"], data["validy"]))
-        except KeyError:
-            X = data["X"]
-            try:
-                y = data["y"]
-            except KeyError:
-                y = np.ones((np.shape(X)[0],))
-        try:
-            testX = data["testX"]
-            testy = data["testy"]
-        except KeyError:
-            testImages = testLabels = testy = numTestImages = None
-        ### Added scaling 06/01/15 ###
-        #scaler = preprocessing.StandardScaler(with_std=False).fit(X)
-        #X = scaler.transform(X)
-        numTrainImages, n = np.shape(X)
-        #print numTrainImages
-        try:
-            trainLabels = y
-        except NameError:
-            trainLabels = np.ones((numTrainImages,))
-        trainImages = np.zeros((self.imageDim,self.imageDim,1,numTrainImages))
-        for i in range(numTrainImages):
-            image = np.reshape(X[i,:], (self.imageDim,self.imageDim), order="F")
-            trainImages[:,:,0,i] = trainImages[:,:,0,i] + image
-        X = None
-
-        if np.any(testy):
-            ### Added scaling 06/01/15 ###
-            #testX = scaler.transform(testX)
-            numTestImages, n = np.shape(testX)
-            testLabels = data["testy"]
-            testImages = np.zeros((self.imageDim,self.imageDim,1,numTestImages))
-            for i in range(numTestImages):
-                image = np.reshape(testX[i,:], (self.imageDim,self.imageDim), order="F")
-                testImages[:,:,0,i] = testImages[:,:,0,i] + image
-        testX = None
-        data = None
-
-        return trainImages, trainLabels, numTrainImages,\
-               testImages, testLabels, numTestImages
-
-class load_convolved_and_pooled_task(multiprocessingUtils.Task):
-    def __init__(self, featuresFile):
-        self.featuresFile = featuresFile
-
-    def __call__(self):
-        features = sio.loadmat(self.featuresFile)
-        pooledFeaturesTrain = features["pooledFeaturesTrain"]
-        pooledFeaturesTest = features["pooledFeaturesTest"]
-        return pooledFeaturesTrain, pooledFeaturesTest
-
-    def __str__(self):
-        return "Loading features from : %s" % self.featuresFile
-
-def convolve(patchDim, numFeatures, images, W):
-    m = np.shape(images)[3]
-    imageDim = np.shape(images)[0]
-    imageChannels = np.shape(images)[2]
-    convolvedFeatures = np.zeros((numFeatures, m, \
-                        imageDim - patchDim + 1, imageDim - patchDim + 1))
-    for imageNum in range(m):
-        for featureNum in range(numFeatures):
-            convolvedImage = np.zeros((imageDim - patchDim + 1, imageDim - patchDim + 1))
-            for channel in range(imageChannels):
-                feature = np.zeros((patchDim, patchDim))
-                start = channel * patchDim*patchDim
-                stop = start + patchDim*patchDim
-                feature += np.reshape(W[featureNum, start:stop], (patchDim, patchDim), order="F")
-                feature = np.flipud(np.fliplr(feature))
-                im = images[:, :, channel, imageNum]
-                convolvedImage += sig.convolve2d(im, feature, "valid")
-            # sparse filtering activation function
-            convolvedImage = np.sqrt(1e-8 + np.multiply(convolvedImage, convolvedImage))
-            convolvedFeatures[featureNum, imageNum, :, :] = convolvedImage
-    return convolvedFeatures
 
 def pool(poolDim, convolvedFeatures):
     numImages = np.shape(convolvedFeatures)[1]
@@ -379,24 +251,35 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_fun
     
     return FoM, threshold
 
-def cross_validate_Softmax(dataFile, X, Y, pooledFile, imageDim, fom_func, n_folds=5):
+def cross_validate_Softmax(dataFile, X, Y, m, pooledFile, imageDim, fom_func, n_folds=5):
     
     from sklearn.cross_validation import KFold
-    
-    m = len(np.squeeze(Y))
+    X = X.T
+        
     CGrid = [30,10,3,1]
     kf = KFold(m, n_folds=n_folds)
     taskList = []
     cpu_count = multiprocessing.cpu_count()
+    folds = {}
     for C in CGrid:
         fold = 1
         FoMs = []
         for train, test in kf:
-
-            taskList.append(train_SoftMax_task(C, fold, X[train], Y[train], \
-                                               X[test], Y[test], fom_func=fom_func))
+            trainX = convert_to_sharedmem(np.ascontiguousarray(X[:,train]))
+            trainY = convert_to_sharedmem(np.ascontiguousarray(Y[train]))
+            testX  = convert_to_sharedmem(np.ascontiguousarray(X[:,test]))
+            testY  = convert_to_sharedmem(np.ascontiguousarray(Y[test]))
+            folds[fold] = {"X":trainX, \
+                           "Y":trainY, \
+                           "testX":testX, \
+                           "testY":testY}
             fold += 1
-
+    X = None
+    Y = None
+    for C in CGrid:
+        for fold in folds.keys():
+            taskList.append(train_SoftMax_task(C, fold, folds[fold]["X"], folds[fold]["Y"], \
+                                               folds[fold]["testX"], folds[fold]["testY"], fom_func=fom_func))
     resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
 
     FoMs = np.zeros((len(CGrid), n_folds))
@@ -408,6 +291,16 @@ def cross_validate_Softmax(dataFile, X, Y, pooledFile, imageDim, fom_func, n_fol
     best_FoM_index = np.argmin(np.mean(FoMs, axis=1))
     print "[+] Best performing classifier: C : %lf" % CGrid[best_FoM_index]
     return CGrid[best_FoM_index]
+
+def convert_to_sharedmem(S):
+    size = S.size
+    shape = S.shape
+    S.shape = size
+    S_ctypes = sharedctypes.RawArray('d', S)
+    S = np.frombuffer(S_ctypes, dtype=np.float64, count=size)
+    S.shape = shape
+    return S,shape
+
 
 def main():
     """
@@ -488,13 +381,6 @@ def main():
     try:
         data = sio.loadmat(patchesFile)
         patches = data["patches"].T[:,:numPatches]
-        ### Added scaling 06/01/15 ###
-        #n,m = np.shape(patches)
-        #means = np.mean(patches, axis=0)
-        #means = np.tile(means, (n,1))
-        #print np.shape(means)
-        #patches = patches - means
-        #data = means = None
     except IOError:
         print "[!] Exiting: could not open patches file - %s" % patchesFile
         exit(0)
@@ -510,24 +396,20 @@ def main():
     (maxiter, dataFile.split("/")[-1].split(".")[0], patchDim, patchDim, numFeatures, \
     patchesFile.split("/")[-1].split(".")[0], poolDim)
     try:
-        featuresTask = load_convolved_and_pooled_task(featuresFile)
-        resultsList = multiprocessingUtils.multiprocessTaskList([featuresTask], 1)
-        pooledFeaturesTrain = resultsList[0][0]
-        pooledFeaturesTest  = resultsList[0][1]
+        features = sio.loadmat(featuresFile)
+        pooledFeaturesTrain = features["pooledFeaturesTrain"]
+        pooledFeaturesTest = features["pooledFeaturesTest"]
         print "[*] convolved and pooled features loaded"
     except IOError:
         print "[*] no convloved and pooled features found for %s" % dataFile.split("/")[-1]
         print "[+] convolving and pooling..."
         convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, \
                           numFeatures, stepSize)
-        featuresTask = load_convolved_and_pooled_task(featuresFile)
-        resultsList = multiprocessingUtils.multiprocessTaskList([featuresTask], 1)
-        pooledFeaturesTrain = resultsList[0][0]
-        pooledFeaturesTest  = resultsList[0][1]
+        features = sio.loadmat(featuresFile)
+        pooledFeaturesTrain = features["pooledFeaturesTrain"]
+        pooledFeaturesTest = features["pooledFeaturesTest"]
+        
         print "[+] Done."
-
-    print pooledFeaturesTrain.shape
-    print pooledFeaturesTest.shape
 
     if cv == None:
         cv = False
@@ -535,18 +417,34 @@ def main():
     if sgd == None:
         sgd = False
 
-    loadDataTask = load_data_task(dataFile, imageDim, pooledFeaturesTrain, pooledFeaturesTest)
-    resultsList = multiprocessingUtils.multiprocessTaskList([loadDataTask], 1)
+    trainImages, trainLabels, numTrainImages,\
+    testImages, testLabels, numTestImages = load_data(dataFile, imageDim)
+        
+    trainImages = None
+    testImages  = None
+        
+    X = np.transpose(pooledFeaturesTrain, (0,2,3,1))
+    X = np.reshape(X, (int((pooledFeaturesTrain.size)/float(numTrainImages)), \
+                   numTrainImages), order="F")
+    pooledFeaturesTrain = None
+    # MinMax scaling removed 11-03-2015
+    scaler = preprocessing.MinMaxScaler()
+    scaler.fit(X.T)  # Don't cheat - fit only on training data
+    X = scaler.transform(X.T)
+    Y = np.squeeze(trainLabels)
+        
 
-    X     = resultsList[0][0]
-    Y     = resultsList[0][1]
-    testX = resultsList[0][2]
-    testY = resultsList[0][3]
+    testX = np.transpose(pooledFeaturesTest, (0,2,3,1))
+    testX = np.reshape(testX, (int((pooledFeaturesTest.size)/float(numTestImages)), \
+                       numTestImages), order="F")
+    pooledFeaturesTest = None
+    # MinMax scaling removed 11-03-2015
+    testX = scaler.transform(testX.T)
+    testY = np.squeeze(testLabels)
 
-    print X.shape
-    print Y.shape
-    print testX.shape
-    print testY.shape
+    trainLabels = None
+    testLabels  = None
+
 
     if C != None and cv == False:
 
@@ -555,7 +453,7 @@ def main():
 
     elif cv == True:
     
-        C = cross_validate_Softmax(dataFile, X, Y, featuresFile, imageDim, one_percent_mdr)
+        C = cross_validate_Softmax(dataFile, X, Y, numTrainImages, featuresFile, imageDim, one_percent_mdr)
         train_Softmax(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, one_percent_mdr, \
                       sgd, save=True, prefix="")
 

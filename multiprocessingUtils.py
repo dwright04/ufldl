@@ -70,12 +70,12 @@ def multiprocessTaskList(taskList, cpuCount):
 
     tasks = multiprocessing.Queue()
     results = multiprocessing.Queue()
-
-    print "Creating %d workers ..." % (cpuCount),
-    workers = [worker(tasks, results) for i in range(cpuCount)]
+    nworkers = min([len(taskList), cpuCount])
+    print "Creating %d workers ..." % (nworkers),
+    workers = [worker(tasks, results) for i in range(nworkers)]
     print "[Done]"
 
-    for i in range(cpuCount):
+    for i in range(nworkers):
         workers[i].start()
 
     # workers are now wating for tasks to be added to the queue
@@ -90,8 +90,8 @@ def multiprocessTaskList(taskList, cpuCount):
     print "[Done]"
 
     # Add stop value to queues, one for each process spawned
-    print "Adding %d stop values to queue ..." % ((cpuCount)),
-    for i in range(len(workers)):
+    print "Adding %d stop values to queue ..." % (nworkers),
+    for i in range(nworkers):
         tasks.put(None)
     print "[Done]"
 
