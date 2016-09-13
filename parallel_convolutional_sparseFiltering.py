@@ -30,10 +30,16 @@ class train_SoftMax_task(multiprocessingUtils.Task):
     def __init__(self, C, fold, X, Y, testX, testY, fom_func=one_percent_mdr):
         self.C = C
         self.fold = fold
+        """
         self.X = self.to_numpy_array(X)
         self.Y = self.to_numpy_array(Y)
         self.testX = self.to_numpy_array(testX)
         self.testY = self.to_numpy_array(testY)
+        """
+        self.X = X
+        self.Y = Y
+        self.testX = testX
+        self.testY = testY
         self.fom_func = fom_func
 
     def __call__(self):
@@ -314,10 +320,17 @@ def cross_validate_Softmax(dataFile, X, Y, m, pooledFile, imageDim, fom_func, n_
         fold = 1
         FoMs = []
         for train, test in kf:
+            """
             trainX = convert_to_sharedmem(np.ascontiguousarray(X[:,train]))
             trainY = convert_to_sharedmem(np.ascontiguousarray(Y[train]))
             testX  = convert_to_sharedmem(np.ascontiguousarray(X[:,test]))
             testY  = convert_to_sharedmem(np.ascontiguousarray(Y[test]))
+            """
+            trainX = X[:,train]
+            trainY = Y[train]
+            testX  = X[:,test]
+            testY  = Y[test]
+            
             folds[fold] = {"X":trainX, \
                            "Y":trainY, \
                            "testX":testX, \
