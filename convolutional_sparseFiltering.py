@@ -1,4 +1,5 @@
-import optparse, pickle
+#import pickle
+import optparse
 import numpy as np
 import scipy.io as sio
 import scipy.signal as sig
@@ -237,7 +238,8 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, sa
         (prefix, C, pooledFile.split("/")[-1].split(".")[0])
 
     try:
-        SFC = pickle.load(open(sfcFile, "rb"))
+        #SFC = pickle.load(open(sfcFile, "rb"))
+        SFC = SoftMaxClassifier(saveFile=sfcFile)
         print "[*] trained classifier found."
         print "[*] trained classifier loaded."
     except IOError:
@@ -246,7 +248,8 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, sa
         print "[+] classifier trained."
         if save:
             print "[+] saving classifier"
-            pickle.dump(SFC, open(sfcFile, "wb"))
+            #pickle.dump(SFC, open(sfcFile, "wb"))
+            SFC.saveNetwork(sfcFile)
 
     #pred = SFC.predict(X.T)
     
