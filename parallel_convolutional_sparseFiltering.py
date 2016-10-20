@@ -201,7 +201,7 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
             featureEnd = (convPart+1)*stepSize
             Wt = W[featureStart:featureEnd, :]
             taskList.append(convolve_and_pool_task(patchDim, poolDim, stepSize, \
-                                                   trainImages[:,:,:,i:(i+1)*1000], Wt))
+                                                   trainImages[:,:,:,i*1000:(i+1)*1000], Wt))
 
     resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
 
@@ -210,7 +210,7 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
         for convPart in range(numFeatures/stepSize):
             featureStart = convPart*stepSize
             featureEnd = (convPart+1)*stepSize
-            pooledFeaturesTrain[featureStart:featureEnd, i:(i+1)*1000, :, :] += resultsList[j]
+            pooledFeaturesTrain[featureStart:featureEnd, i*1000:(i+1)*1000, :, :] += resultsList[j]
             j += 1
     
     if np.any(testImages):
@@ -225,7 +225,7 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
                 featureEnd = (convPart+1)*stepSize
                 Wt = W[featureStart:featureEnd, :]
                 taskList.append(convolve_and_pool_task(patchDim, poolDim, stepSize, \
-                                                       testImages[:,:,:,i:(i+1)*1000], Wt))
+                                                       testImages[:,:,:,i*1000:(i+1)*1000], Wt))
 
         resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
 
@@ -234,7 +234,7 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
             for convPart in range(numFeatures/stepSize):
                 featureStart = convPart*stepSize
                 featureEnd = (convPart+1)*stepSize
-                pooledFeaturesTest[featureStart:featureEnd, i:(i+1)*1000, :, :] += resultsList[j]
+                pooledFeaturesTest[featureStart:featureEnd, i*1000:(i+1)*1000, :, :] += resultsList[j]
                 j += 1
 
     if np.any(testImages):
