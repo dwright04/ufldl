@@ -187,7 +187,6 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
 
     trainImages, trainLabels, numTrainImages,\
     testImages, testLabels, numTestImages = load_data(dataFile, imageDim)
-    print testImages
     pooledFeaturesTrain = np.zeros((numFeatures,numTrainImages, \
                                     int(np.floor((imageDim-patchDim+1)/poolDim)), \
                                     int(np.floor((imageDim-patchDim+1)/poolDim))))
@@ -202,7 +201,7 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
             Wt = W[featureStart:featureEnd, :]
             taskList.append(convolve_and_pool_task(patchDim, poolDim, stepSize, \
                                                    trainImages[:,:,:,i*1000:(i+1)*1000], Wt))
-
+    print len(taskList)
     resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
 
     j = 0
