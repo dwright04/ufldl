@@ -1007,14 +1007,7 @@ class SoftMaxClassifier(NeuralNet):
     """
     def __init__(self, input, targets, LAMBDA=0.0, maxiter=100, saveFile=None):
         if saveFile:
-            params = sio.loadmat(saveFile)
-            self._trainedParams = params["trainedParams"]
-            self._LAMBDA = params["LAMBDA"]
-            self._architecture = {}
-            for key in savedNeuralNetSetup.keys():
-                if "architecture" in key:
-                    layerKey = int(key.replace("architecture", ""))
-                    self._architecture[layerKey] = savedNeuralNetSetup[key]
+            pass
         else:
             architecture = {}
             NeuralNet.__init__(self, input, targets, architecture, LAMBDA, classify=True, maxiter=maxiter, saveFile=saveFile)
@@ -1132,6 +1125,22 @@ class SoftMaxClassifier(NeuralNet):
         #input = np.concatenate((np.tile(1, (1, m)), input), axis=0) # add bias units
         hypothesis = self.feedForward(theta, input)
         return hypothesis
+
+
+    def generateSetupDict(self):
+        neuralNetSetupDict = {}
+        for key in self._architecture.keys():
+            neuralNetSetupDict["architecture"+str(key)] = self._architecture[key]
+        neuralNetSetupDict["LAMBDA"] = self._LAMBDA
+        neuralNetSetupDict["trainedParams"] = self._trainedParams
+        return neuralNetSetupDict
+
+    def saveNetwork(self, outputFile):
+        
+        import scipy.io as sio
+        neuralNetSetupDict = self.generateSetupDict()
+        sio.savemat(outputFile, neuralNetSetupDict)
+        print "Trained %s saved in %s" % (self.search(), outputFile)
 
 class SoftMaxOnline(SoftMaxClassifier):
     """
