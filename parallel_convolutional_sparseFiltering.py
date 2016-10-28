@@ -320,8 +320,7 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_fun
     try:
         #SFC = pickle.load(open(sfcFile, "rb"))
         print "[*] trained classifier found."
-        print sfcFile
-        SFC = SoftMaxClassifier(X.T, Y, saveFile=sfcFile)
+        SFC = SoftMaxClassifier(saveFile=sfcFile)
         print "[*] trained classifier loaded."
     except IOError:
         print "[*] Training Softmax Classifier with LAMBDA=%e" % (C)
