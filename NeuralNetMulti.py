@@ -176,12 +176,9 @@ class NeuralNet(object):
             self._trainedParams = None
         else:
             # import here to avoid overhead if no saveFile is given.
-            import 0s
             import scipy.io as sio
             # try to open the given saveFile
             try:
-                if not os.path.isfile(saveFile):
-                    raise IOError
                 savedNeuralNetSetup = sio.loadmat(saveFile)
                 # initialise data attributes as saved in saveFile
                 self._architecture = {}
