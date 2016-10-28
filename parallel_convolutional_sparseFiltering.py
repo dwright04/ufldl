@@ -318,7 +318,8 @@ def cross_validate_Softmax(dataFile, X, Y, m, pooledFile, imageDim, fom_func, n_
     global folds
     X = X.T
         
-    CGrid = [30,10,3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3]
+    #CGrid = [30,10,3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3]
+    CGrid = [30,10]
     kf = KFold(m, n_folds=n_folds)
     taskList = []
     cpu_count = multiprocessing.cpu_count()
