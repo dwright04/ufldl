@@ -319,8 +319,9 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_fun
 
     try:
         #SFC = pickle.load(open(sfcFile, "rb"))
-        SFC = SoftMaxClassifier(X.T, Y, saveFile=sfcFile)
         print "[*] trained classifier found."
+        print sfcFile
+        SFC = SoftMaxClassifier(X.T, Y, saveFile=sfcFile)
         print "[*] trained classifier loaded."
     except IOError:
         print "[*] Training Softmax Classifier with LAMBDA=%e" % (C)
@@ -348,7 +349,8 @@ def cross_validate_Softmax(dataFile, X, Y, m, pooledFile, imageDim, fom_func, n_
     global folds
     X = X.T
         
-    CGrid = [30,10,3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3]
+    #CGrid = [30,10,3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3]
+    CGrid = [30,10]
     kf = KFold(m, n_folds=n_folds)
     taskList = []
     cpu_count = multiprocessing.cpu_count()
