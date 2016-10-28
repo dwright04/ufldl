@@ -1006,20 +1006,11 @@ class SoftMaxClassifier(NeuralNet):
         superclass: NeuralNet
     """
     def __init__(self, input, targets, LAMBDA=0.0, maxiter=100, saveFile=None):
-        if saveFile:
-            params = sio.loadmat(saveFile)
-            self._trainedParams = params["trainedParams"]
-            self._LAMBDA = params["LAMBDA"]
-            self._architecture = {}
-            for key in savedNeuralNetSetup.keys():
-                if "architecture" in key:
-                    layerKey = int(key.replace("architecture", ""))
-                    self._architecture[layerKey] = savedNeuralNetSetup[key]
-        else:
-            architecture = {}
-            NeuralNet.__init__(self, input, targets, architecture, LAMBDA, classify=True, maxiter=maxiter, saveFile=saveFile)
-            self._indicatorFunction = self.labelsToIndicatorFunction(self._targets)
-            self._architecture = {0:np.shape(self._input)[0]-1, 1:np.shape(self._indicatorFunction)[0]}
+
+        architecture = {}
+        NeuralNet.__init__(self, input, targets, architecture, LAMBDA, classify=True, maxiter=maxiter, saveFile=saveFile)
+        self._indicatorFunction = self.labelsToIndicatorFunction(self._targets)
+        self._architecture = {0:np.shape(self._input)[0]-1, 1:np.shape(self._indicatorFunction)[0]}
 
     def search(self):
         return "SoftMaxClassifier"
