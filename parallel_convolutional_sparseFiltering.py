@@ -319,7 +319,7 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_fun
 
     try:
         #SFC = pickle.load(open(sfcFile, "rb"))
-        SFC = SoftMaxClassifier(saveFile=sfcFile)
+        SFC = SoftMaxClassifier(X.T, Y, saveFile=sfcFile)
         print "[*] trained classifier found."
         print "[*] trained classifier loaded."
     except IOError:
@@ -330,7 +330,7 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_fun
             print "[+] saving classifier"
             #pickle.dump(SFC, open(sfcFile, "wb"))
             SFC.saveNetwork(sfcFile)
-
+    print SFC._trainedParams
     pred = SFC.predict(testX.T).T
     indices = np.argmax(pred, axis=1)
     pred = np.max(pred, axis=1)
