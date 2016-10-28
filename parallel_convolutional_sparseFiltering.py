@@ -92,7 +92,7 @@ class convolve_and_pool_task(multiprocessingUtils.Task):
         
     def __str__(self):
         return 'Step %d: features %d to %d\n'% (self.convPart, self.featureStart, self.featureEnd)
-
+"""
 class convolve_and_pool_task(multiprocessingUtils.Task):
     def __init__(self, convPart, patchDim, poolDim, stepSize, trainImages, testImages, W):
         self.convPart = convPart
@@ -118,7 +118,27 @@ class convolve_and_pool_task(multiprocessingUtils.Task):
         
     def __str__(self):
         return 'Step %d: features %d to %d\n'% (self.convPart, self.featureStart, self.featureEnd)
+"""
 
+class convolve_and_pool_task(multiprocessingUtils.Task):
+    def __init__(self, patchDim, poolDim, stepSize, images, Wt, featureStart, featureEnd, i):
+        self.patchDim = patchDim
+        self.poolDim = poolDim
+        self.stepSize = stepSize
+        self.images = images
+        self.Wt = Wt
+    
+        self.featureStart = featureStart
+        self.featureEnd = featureEnd
+        self.i = i
+    
+    def __call__(self):
+        convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.images, self.Wt)
+        pooledFeaturesThis = pool(self.poolDim, convolvedFeaturesThis)
+        return pooledFeaturesThis, self.featureStart, self.featureEnd, self.i, self.images.shape[3]
+        
+    def __str__(self):
+        return 'convolving'
 
 def convolve(patchDim, numFeatures, images, W):
     m = np.shape(images)[3]
@@ -240,7 +260,7 @@ def load_data(dataFile, imageDim):
     return trainImages, trainLabels, numTrainImages,\
            testImages, testLabels, numTestImages
 
-
+"""
 def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, numFeatures, stepSize):
 
     trainImages, trainLabels, numTrainImages,\
@@ -276,7 +296,65 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
     else:
         sio.savemat(featuresFile, \
                     {"pooledFeaturesTrain":pooledFeaturesTrain})
-                 
+"""
+
+def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, numFeatures, stepSize):
+
+    batchSize = 1
+
+    trainImages, trainLabels, numTrainImages,\
+    testImages, testLabels, numTestImages = load_data(dataFile, imageDim)
+    pooledFeaturesTrain = np.zeros((numFeatures,numTrainImages, \
+                                    int(np.floor((imageDim-patchDim+1)/poolDim)), \
+                                    int(np.floor((imageDim-patchDim+1)/poolDim))))
+    
+    taskList = []
+    cpu_count = multiprocessing.cpu_count()
+    
+    for convPart in range(numFeatures/stepSize):
+        for i in range(0,numTrainImages,batchSize):
+            featureStart = convPart*stepSize
+            featureEnd = (convPart+1)*stepSize
+            Wt = W[featureStart:featureEnd, :]
+            taskList.append(convolve_and_pool_task(patchDim, poolDim, stepSize, \
+                                                   trainImages[:,:,:,i:(i+1)*batchSize], Wt, \
+                                                   featureStart, featureEnd, i))
+
+    print len(taskList)
+    resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
+
+    for result in resultsList:
+        pooledFeaturesTrain[result[1]:result[2], result[3]:result[3]+result[4], :, :] += result[0]
+    
+    
+    if np.any(testImages):
+        pooledFeaturesTest = np.zeros((numFeatures,numTestImages, \
+                                       int(np.floor((imageDim-patchDim+1)/poolDim)), \
+                                       int(np.floor((imageDim-patchDim+1)/poolDim))))
+        taskList = []
+        
+        for convPart in range(numFeatures/stepSize):
+            for i in range(0,numTrainImages,batchSize):
+                featureStart = convPart*stepSize
+                featureEnd = (convPart+1)*stepSize
+                Wt = W[featureStart:featureEnd, :]
+                taskList.append(convolve_and_pool_task(patchDim, poolDim, stepSize, \
+                                                       testImages[:,:,:,i:(i+1)*batchSize], Wt, \
+                                                       featureStart, featureEnd, i))
+
+        resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
+
+    for result in resultsList:
+        pooledFeaturesTest[result[1]:result[2], result[3]:result[3]+result[4], :, :] += result[0]
+
+    if np.any(testImages):
+        sio.savemat(featuresFile, \
+                    {"pooledFeaturesTrain":pooledFeaturesTrain, \
+                     "pooledFeaturesTest":pooledFeaturesTest})
+    else:
+        sio.savemat(featuresFile, \
+                    {"pooledFeaturesTrain":pooledFeaturesTrain})
+
 def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_func, sgd, save=True, prefix=""):
 
     if sgd:
@@ -320,8 +398,8 @@ def cross_validate_Softmax(dataFile, X, Y, m, pooledFile, imageDim, fom_func, n_
     global folds
     X = X.T
         
-    #CGrid = [30,10,3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3]
-    CGrid = [30,10]
+    CGrid = [30,10,3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3]
+    #CGrid = [30,10]
     kf = KFold(m, n_folds=n_folds)
     taskList = []
     cpu_count = multiprocessing.cpu_count()
