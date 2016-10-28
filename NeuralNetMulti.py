@@ -71,7 +71,6 @@ class NeuralNet(object):
                        of training examples.  The bias unit should not be added 
                        to the input data array before instantiating the NeuralNet.
                        The bias is automatically added to the input array.
-
                 targets: <numpy array> containing the targets for each training example. 
                          k x m matrix, where k is the number of target values per training
                          example.
@@ -87,7 +86,6 @@ class NeuralNet(object):
                 LAMBDA: positive <float> regularising constant.  Determines the degree to which
                         regularisation is applied.  The larger the value the greater 
                         effect of the regularisation term on the cost function.
-
                 ALPHA: positive <float> learning rate.  Determines the step size toward the global
                        minimum on each iteration of gradient descent.
             
@@ -309,7 +307,6 @@ class NeuralNet(object):
                    the logistic units.
             
             returns:
-
                 <numpy-array> or <float> vector of activations or single value activation for the
                 the layer.
         """
@@ -447,7 +444,6 @@ class NeuralNet(object):
                 gradients: <numpy-array> a vector containing the gradients for each connection of the NerualNet 
                            model.  The gradients are required by optimization algorithms e.g. scipy.fmincg in order
                            to minimise the cost during training.
-
         """
     
         
@@ -1200,4 +1196,3 @@ class DeepNeuralNet(NeuralNet):
 
     def search(self):
         return "DeepNeuralNet"
-

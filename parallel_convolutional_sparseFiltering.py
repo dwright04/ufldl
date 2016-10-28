@@ -1,4 +1,4 @@
-
+#import pickle
 import optparse, sys, multiprocessing
 import multiprocessingUtils
 
@@ -25,72 +25,101 @@ def one_percent_fpr(y, pred):
     return FoM, threshold
 
 class train_SoftMax_task(multiprocessingUtils.Task):
+    #def __init__(self, C, fold, X, Y, testX, testY, s1, s2, s3, s4, fom_func=one_percent_mdr):
+    #def __init__(self, C, fold, X, Y, testX, testY, fom_func=one_percent_mdr):
     def __init__(self, C, fold, fom_func=one_percent_mdr):
         self.C = C
         self.fold = fold
+        """
+        self.X = self.to_numpy_array(X,s1)
+        self.Y = self.to_numpy_array(Y,s2)
+        self.testX = self.to_numpy_array(testX,s3)
+        self.testY = self.to_numpy_array(testY,s4)
+        """
+        """
+        self.X = X
+        self.Y = Y
+        self.testX = testX
+        self.testY = testY
+        """
         self.fom_func = fom_func
 
     def __call__(self):
+        #clf = SoftMaxClassifier(self.X, self.Y, LAMBDA=self.C, maxiter=10000)
         clf = SoftMaxClassifier(folds[self.fold]["X"], folds[self.fold]["Y"], LAMBDA=self.C, maxiter=10000)
         clf.train()
+        #pred = clf.predict(self.testX).T
         pred = clf.predict(folds[self.fold]["testX"]).T
         indices = np.argmax(pred, axis=1)
         pred = np.max(pred, axis=1)
         pred[indices==0] = 1 - pred[indices==0]
     
+        #FoM, threshold = self.fom_func(self.testY, pred)
         FoM, threshold = self.fom_func(folds[self.fold]["testY"], pred)
         return FoM, threshold, self.C, self.fold
 
     def __str__(self):
         return "Training Softmax Classifier with LAMBDA=%e" % (self.C)
-
+    """
+    def to_numpy_array(self, S, s):
+        S_numpy = ctypeslib.as_array(S)
+        S_numpy.shape = s
+        return S_numpy
+    """
 class convolve_and_pool_task(multiprocessingUtils.Task):
-    def __init__(self, patchDim, poolDim, stepSize, images, Wt, featureStart, featureEnd, i):
+
+    def __init__(self, convPart, patchDim, poolDim, stepSize, trainImages, testImages, W):
+        self.convPart = convPart
         self.patchDim = patchDim
         self.poolDim = poolDim
         self.stepSize = stepSize
-        self.images = images
-        self.Wt = Wt
-    
-        self.featureStart = featureStart
-        self.featureEnd = featureEnd
-        self.i = i
+        self.trainImages = trainImages
+        self.testImages = testImages
+        self.W = W
+        
+        self.featureStart = self.convPart*self.stepSize
+        self.featureEnd = (self.convPart+1)*self.stepSize
     
     def __call__(self):
-        convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.images, self.Wt)
-        pooledFeaturesThis = pool(self.poolDim, convolvedFeaturesThis)
-        return pooledFeaturesThis, self.featureStart, self.featureEnd, self.i, self.images.shape[3]
+        Wt = self.W[self.featureStart:self.featureEnd, :]
+        convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.trainImages, Wt)
+        pooledFeaturesThisTrain = pool(self.poolDim, convolvedFeaturesThis)
+        if np.any(self.testImages):
+            print 'Convolving and pooling test images\n'
+            convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.testImages, Wt)
+            pooledFeaturesThisTest = pool(self.poolDim, convolvedFeaturesThis)
+        return pooledFeaturesThisTrain, pooledFeaturesThisTest, self.featureStart, self.featureEnd
         
     def __str__(self):
-        return 'convolving'
+        return 'Step %d: features %d to %d\n'% (self.convPart, self.featureStart, self.featureEnd)
 
-"""
 class convolve_and_pool_task(multiprocessingUtils.Task):
-     def __init__(self, convPart, patchDim, poolDim, stepSize, trainImages, testImages, W):
-         self.convPart = convPart
-         self.patchDim = patchDim
-         self.poolDim = poolDim
-         self.stepSize = stepSize
-         self.trainImages = trainImages
-         self.testImages = testImages
-         self.W = W
-         
-         self.featureStart = self.convPart*self.stepSize
-         self.featureEnd = (self.convPart+1)*self.stepSize
-     
-     def __call__(self):
-         Wt = self.W[self.featureStart:self.featureEnd, :]
-         convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.trainImages, Wt)
-         pooledFeaturesThisTrain = pool(self.poolDim, convolvedFeaturesThis)
-         if np.any(self.testImages):
-             print 'Convolving and pooling test images\n'
-             convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.testImages, Wt)
-             pooledFeaturesThisTest = pool(self.poolDim, convolvedFeaturesThis)
-         return pooledFeaturesThisTrain, pooledFeaturesThisTest, self.featureStart, self.featureEnd
-         
-     def __str__(self):
-         return 'Step %d: features %d to %d\n'% (self.convPart, self.featureStart, self.featureEnd)
-"""
+    def __init__(self, convPart, patchDim, poolDim, stepSize, trainImages, testImages, W):
+        self.convPart = convPart
+        self.patchDim = patchDim
+        self.poolDim = poolDim
+        self.stepSize = stepSize
+        self.trainImages = trainImages
+        self.testImages = testImages
+        self.W = W
+        
+        self.featureStart = self.convPart*self.stepSize
+        self.featureEnd = (self.convPart+1)*self.stepSize
+    
+    def __call__(self):
+        Wt = self.W[self.featureStart:self.featureEnd, :]
+        convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.trainImages, Wt)
+        pooledFeaturesThisTrain = pool(self.poolDim, convolvedFeaturesThis)
+        if np.any(self.testImages):
+            print 'Convolving and pooling test images\n'
+            convolvedFeaturesThis = convolve(self.patchDim, self.stepSize, self.testImages, Wt)
+            pooledFeaturesThisTest = pool(self.poolDim, convolvedFeaturesThis)
+        return pooledFeaturesThisTrain, pooledFeaturesThisTest, self.featureStart, self.featureEnd
+        
+    def __str__(self):
+        return 'Step %d: features %d to %d\n'% (self.convPart, self.featureStart, self.featureEnd)
+
+
 def convolve(patchDim, numFeatures, images, W):
     m = np.shape(images)[3]
     imageDim = np.shape(images)[0]
@@ -155,7 +184,6 @@ def get_sparseFilter(numFeatures, patches, patchesFile, maxiter=100):
 def load_data(dataFile, imageDim):
     """
         currently only works for single channel images
-
         2 feb 2015:
             added imageDim argument to fix hard coding 
             image dimensions.
@@ -215,64 +243,6 @@ def load_data(dataFile, imageDim):
 
 def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, numFeatures, stepSize):
 
-    batchSize = 1
-
-    trainImages, trainLabels, numTrainImages,\
-    testImages, testLabels, numTestImages = load_data(dataFile, imageDim)
-    pooledFeaturesTrain = np.zeros((numFeatures,numTrainImages, \
-                                    int(np.floor((imageDim-patchDim+1)/poolDim)), \
-                                    int(np.floor((imageDim-patchDim+1)/poolDim))))
-    
-    taskList = []
-    cpu_count = multiprocessing.cpu_count()
-    
-    for convPart in range(numFeatures/stepSize):
-        for i in range(0,numTrainImages,batchSize):
-            featureStart = convPart*stepSize
-            featureEnd = (convPart+1)*stepSize
-            Wt = W[featureStart:featureEnd, :]
-            taskList.append(convolve_and_pool_task(patchDim, poolDim, stepSize, \
-                                                   trainImages[:,:,:,i:(i+1)*batchSize], Wt, \
-                                                   featureStart, featureEnd, i))
-
-    print len(taskList)
-    resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
-
-    for result in resultsList:
-        pooledFeaturesTrain[result[1]:result[2], result[3]:result[3]+result[4], :, :] += result[0]
-    
-    
-    if np.any(testImages):
-        pooledFeaturesTest = np.zeros((numFeatures,numTestImages, \
-                                       int(np.floor((imageDim-patchDim+1)/poolDim)), \
-                                       int(np.floor((imageDim-patchDim+1)/poolDim))))
-        taskList = []
-        
-        for convPart in range(numFeatures/stepSize):
-            for i in range(0,numTrainImages,batchSize):
-                featureStart = convPart*stepSize
-                featureEnd = (convPart+1)*stepSize
-                Wt = W[featureStart:featureEnd, :]
-                taskList.append(convolve_and_pool_task(patchDim, poolDim, stepSize, \
-                                                       testImages[:,:,:,i:(i+1)*batchSize], Wt, \
-                                                       featureStart, featureEnd, i))
-
-        resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
-
-    for result in resultsList:
-        pooledFeaturesTest[result[1]:result[2], result[3]:result[3]+result[4], :, :] += result[0]
-
-    if np.any(testImages):
-        sio.savemat(featuresFile, \
-                    {"pooledFeaturesTrain":pooledFeaturesTrain, \
-                     "pooledFeaturesTest":pooledFeaturesTest})
-    else:
-        sio.savemat(featuresFile, \
-                    {"pooledFeaturesTrain":pooledFeaturesTrain})
-
-"""
-def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, numFeatures, stepSize):
-
     trainImages, trainLabels, numTrainImages,\
     testImages, testLabels, numTestImages = load_data(dataFile, imageDim)
     print testImages
@@ -306,7 +276,7 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
     else:
         sio.savemat(featuresFile, \
                     {"pooledFeaturesTrain":pooledFeaturesTrain})
-"""           
+                 
 def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_func, sgd, save=True, prefix=""):
 
     if sgd:
@@ -319,8 +289,8 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_fun
 
     try:
         #SFC = pickle.load(open(sfcFile, "rb"))
-        print "[*] trained classifier found."
         SFC = SoftMaxClassifier(saveFile=sfcFile)
+        print "[*] trained classifier found."
         print "[*] trained classifier loaded."
     except IOError:
         print "[*] Training Softmax Classifier with LAMBDA=%e" % (C)
@@ -330,7 +300,7 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_fun
             print "[+] saving classifier"
             #pickle.dump(SFC, open(sfcFile, "wb"))
             SFC.saveNetwork(sfcFile)
-    print SFC._trainedParams
+
     pred = SFC.predict(testX.T).T
     indices = np.argmax(pred, axis=1)
     pred = np.max(pred, axis=1)
@@ -348,15 +318,20 @@ def cross_validate_Softmax(dataFile, X, Y, m, pooledFile, imageDim, fom_func, n_
     global folds
     X = X.T
         
-    #CGrid = [30,10,3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3]
-    CGrid = [30,10]
+    CGrid = [30,10,3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3]
     kf = KFold(m, n_folds=n_folds)
     taskList = []
     cpu_count = multiprocessing.cpu_count()
     folds = {}
     fold = 1
     FoMs = []
-    for train, test in kf:
+    for train, test in kf:        
+        """
+        trainX = convert_to_sharedmem(np.ascontiguousarray(X[:,train]))
+        trainY = convert_to_sharedmem(np.ascontiguousarray(Y[train]))
+        testX  = convert_to_sharedmem(np.ascontiguousarray(X[:,test]))
+        testY  = convert_to_sharedmem(np.ascontiguousarray(Y[test]))
+        """ 
 
         trainX = np.concatenate((np.ones(np.shape(X[:,train])[1])[np.newaxis], X[:,train]), axis=0)
         trainY = Y[train]
@@ -373,6 +348,18 @@ def cross_validate_Softmax(dataFile, X, Y, m, pooledFile, imageDim, fom_func, n_
     Y = None
     for C in CGrid:
         for fold in folds.keys():
+            """
+            taskList.append(train_SoftMax_task(C, fold, folds[fold]["X"][0], folds[fold]["Y"][0], \
+                                               folds[fold]["testX"][0], folds[fold]["testY"][0], \
+                                               folds[fold]["X"][1], folds[fold]["Y"][1], \
+                                               folds[fold]["testX"][1], folds[fold]["testY"][1], \
+                                               fom_func=fom_func))
+            """
+            """
+            taskList.append(train_SoftMax_task(C, fold, folds[fold]["X"], folds[fold]["Y"], \
+                                               folds[fold]["testX"], folds[fold]["testY"], \
+                                               fom_func=fom_func))
+            """
             taskList.append(train_SoftMax_task(C, fold, fom_func=fom_func))
     resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
 
@@ -385,6 +372,16 @@ def cross_validate_Softmax(dataFile, X, Y, m, pooledFile, imageDim, fom_func, n_
     best_FoM_index = np.argmin(np.mean(FoMs, axis=1))
     print "[+] Best performing classifier: C : %lf" % CGrid[best_FoM_index]
     return CGrid[best_FoM_index]
+"""
+def convert_to_sharedmem(S):
+    size = S.size
+    shape = S.shape
+    S.shape = size
+    S_ctypes = sharedctypes.RawArray('d', S)
+    S = np.frombuffer(S_ctypes, dtype=np.float64, count=size)
+    S.shape = shape
+    return S,shape
+"""
 
 def main():
     """

@@ -74,7 +74,6 @@ def get_sparseFilter(numFeatures, patches, patchesFile, maxiter=100):
 def load_data(dataFile, imageDim):
     """
         currently only works for single channel images
-
         2 feb 2015:
             added imageDim argument to fix hard coding 
             image dimensions.
