@@ -176,7 +176,7 @@ class NeuralNet(object):
             self._trainedParams = None
         else:
             # import here to avoid overhead if no saveFile is given.
-            import 0s
+            import os
             import scipy.io as sio
             # try to open the given saveFile
             try:
