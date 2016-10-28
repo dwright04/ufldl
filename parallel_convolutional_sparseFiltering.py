@@ -138,7 +138,7 @@ class convolve_and_pool_task(multiprocessingUtils.Task):
         return pooledFeaturesThis, self.featureStart, self.featureEnd, self.i, self.images.shape[3]
         
     def __str__(self):
-        return 'convolving'
+        return 'convolving stamp %d: features %d to %d\n'% (self.i, self.featureStart, self.featureEnd)
 
 def convolve(patchDim, numFeatures, images, W):
     m = np.shape(images)[3]
@@ -320,7 +320,6 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
                                                    trainImages[:,:,:,i:(i+1)*batchSize], Wt, \
                                                    featureStart, featureEnd, i))
 
-    print len(taskList)
     resultsList = multiprocessingUtils.multiprocessTaskList(taskList, cpu_count)
 
     for result in resultsList:
