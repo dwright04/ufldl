@@ -1,4 +1,4 @@
-#import pickle
+import cPickle as pickle
 import optparse, sys, multiprocessing
 import multiprocessingUtils
 
@@ -288,9 +288,9 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_fun
         (prefix, C, pooledFile.split("/")[-1].split(".")[0])
 
     try:
-        #SFC = pickle.load(open(sfcFile, "rb"))
-        SFC = SoftMaxClassifier(saveFile=sfcFile)
         print "[*] trained classifier found."
+        #SFC = SoftMaxClassifier(X.T, Y, saveFile=sfcFile)
+        SFC = pickle.load(open(sfcFile, "rb"))
         print "[*] trained classifier loaded."
     except IOError:
         print "[*] Training Softmax Classifier with LAMBDA=%e" % (C)
@@ -298,8 +298,10 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_fun
         print "[+] classifier trained."
         if save:
             print "[+] saving classifier"
-            #pickle.dump(SFC, open(sfcFile, "wb"))
-            SFC.saveNetwork(sfcFile)
+            SFC._input = None
+            SFC._targets = None
+            pickle.dump(SFC, open(sfcFile, "wb"))
+            #SFC.saveNetwork(sfcFile)
 
     pred = SFC.predict(testX.T).T
     indices = np.argmax(pred, axis=1)
