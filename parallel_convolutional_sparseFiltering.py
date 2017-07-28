@@ -1,6 +1,7 @@
 import cPickle as pickle
 import optparse, sys, multiprocessing
 import multiprocessingUtils
+import h5py
 
 import numpy as np
 import scipy.io as sio
@@ -201,6 +202,7 @@ def get_sparseFilter(numFeatures, patches, patchesFile, maxiter=100):
     #SF.visualiseLearnedFeatures()
     return SF
 
+
 def load_data(dataFile, imageDim):
     """
         currently only works for single channel images
@@ -304,6 +306,7 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
 
     trainImages, trainLabels, numTrainImages,\
     testImages, testLabels, numTestImages = load_data(dataFile, imageDim)
+
     pooledFeaturesTrain = np.zeros((numFeatures,numTrainImages, \
                                     int(np.floor((imageDim-patchDim+1)/poolDim)), \
                                     int(np.floor((imageDim-patchDim+1)/poolDim))))
@@ -325,7 +328,7 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
     for result in resultsList:
         pooledFeaturesTrain[result[1]:result[2], result[3]:result[3]+result[4], :, :] += result[0]
     
-    
+
     if np.any(testImages):
         pooledFeaturesTest = np.zeros((numFeatures,numTestImages, \
                                        int(np.floor((imageDim-patchDim+1)/poolDim)), \
@@ -346,13 +349,25 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
     for result in resultsList:
         pooledFeaturesTest[result[1]:result[2], result[3]:result[3]+result[4], :, :] += result[0]
 
+    featuresFile = featuresFile.replace('.mat','.h5')
     if np.any(testImages):
+        """
         sio.savemat(featuresFile, \
                     {"pooledFeaturesTrain":pooledFeaturesTrain, \
                      "pooledFeaturesTest":pooledFeaturesTest})
+        """
+        h5f = h5py.File(featuresFile, 'w')
+        h5f.create_dataset("pooledFeaturesTrain", data=pooledFeaturesTrain)
+        h5f.create_dataset("pooledFeaturesTest", data=pooledFeaturesTest)
+        h5f.close()
     else:
+        """
         sio.savemat(featuresFile, \
                     {"pooledFeaturesTrain":pooledFeaturesTrain})
+        """
+        h5f = h5py.File(featuresFile, 'w')
+        h5f.create_dataset("pooledFeaturesTrain", data=pooledFeaturesTrain)
+        h5f.close()
 
 def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_func, sgd, save=True, prefix=""):
 
@@ -397,11 +412,12 @@ def cross_validate_Softmax(dataFile, X, Y, m, pooledFile, imageDim, fom_func, n_
     global folds
     X = X.T
         
-    CGrid = [30,10,3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3]
+    CGrid = [3,1,0.3,0.1,3e-2,1e-2,3e-3,1e-3,3e-4,1e-4,3e-5,1e-5,3e-6,1e-6]
     #CGrid = [30,10]
     kf = KFold(m, n_folds=n_folds)
     taskList = []
     cpu_count = multiprocessing.cpu_count()
+    print cpu_count
     folds = {}
     fold = 1
     FoMs = []
@@ -554,7 +570,7 @@ def main():
     patches = None
     # added maxiter to filename  24/02/15
     featuresFile = "features/SF_maxiter%d_L1_%s_%dx%d_k%d_%s_pooled%d.mat" % \
-    (maxiter, dataFile.split("/")[-1].split(".")[0], patchDim, patchDim, numFeatures, \
+    (maxiter, dataFile.split("/")[-1].replace(".mat",""), patchDim, patchDim, numFeatures, \
     patchesFile.split("/")[-1].split(".")[0], poolDim)
     try:
         features = sio.loadmat(featuresFile)
@@ -562,13 +578,20 @@ def main():
         pooledFeaturesTest = features["pooledFeaturesTest"]
         print "[*] convolved and pooled features loaded"
     except IOError:
-        print "[*] no convloved and pooled features found for %s" % dataFile.split("/")[-1]
-        print "[+] convolving and pooling..."
-        convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, \
+        try:
+            h5f = h5py.File(featuresFile.replace('.mat','.h5'),'r')
+            pooledFeaturesTrain = h5f["pooledFeaturesTrain"][:]
+            pooledFeaturesTest = h5f["pooledFeaturesTest"][:]
+            h5f.close()
+            print "[*] convolved and pooled features loaded"
+        except IOError:
+            print "[*] no convloved and pooled features found for %s" % dataFile.split("/")[-1]
+            print "[+] convolving and pooling..."
+            convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, \
                           numFeatures, stepSize)
-        features = sio.loadmat(featuresFile)
-        pooledFeaturesTrain = features["pooledFeaturesTrain"]
-        pooledFeaturesTest = features["pooledFeaturesTest"]
+            features = sio.loadmat(featuresFile)
+            pooledFeaturesTrain = features["pooledFeaturesTrain"]
+            pooledFeaturesTest = features["pooledFeaturesTest"]
         
         print "[+] Done."
 
@@ -593,7 +616,10 @@ def main():
     scaler.fit(X.T)  # Don't cheat - fit only on training data
     X = scaler.transform(X.T)
     Y = np.squeeze(trainLabels)
-        
+
+    #numTrainImages = 60000
+    #X = X[:,:numTrainImages]
+    #Y = Y[:numTrainImages]
 
     testX = np.transpose(pooledFeaturesTest, (0,2,3,1))
     testX = np.reshape(testX, (int((pooledFeaturesTest.size)/float(numTestImages)), \
@@ -608,16 +634,20 @@ def main():
 
 
     if C != None and cv == False:
-
+        """
         train_Softmax(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, one_percent_mdr, \
                 sgd, save=True, prefix="")
-
+        """
+        train_Softmax(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, one_percent_fpr, \
+                sgd, save=True, prefix="")
     elif cv == True:
-    
+        """
         C = cross_validate_Softmax(dataFile, X, Y, numTrainImages, featuresFile, imageDim, one_percent_mdr)
         train_Softmax(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, one_percent_mdr, \
                       sgd, save=True, prefix="")
-
-
+        """
+        C = cross_validate_Softmax(dataFile, X, Y, numTrainImages, featuresFile, imageDim, one_percent_fpr)
+        train_Softmax(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, one_percent_fpr, \
+                      sgd, save=True, prefix="")
 if __name__ == "__main__":
     main()
