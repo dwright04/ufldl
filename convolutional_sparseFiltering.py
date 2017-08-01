@@ -149,7 +149,6 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
         featureEnd = (convPart+1)*stepSize
         print 'Step %d: features %d to %d\n'% (convPart, featureStart, featureEnd)
         Wt = W[featureStart:featureEnd, :]
-        #print np.shape(Wt)
         print 'Convolving and pooling train images\n'
         convolvedFeaturesThis = convolve(patchDim, stepSize, trainImages, Wt)
         #convolvedFeaturesThis = convolve(patchDim, stepSize, trainImages, Wt, bt, ZCAWhite, meanPatch)
@@ -164,13 +163,16 @@ def convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, nu
             pooledFeaturesTest[featureStart:featureEnd, :, :, :] += pooledFeaturesThis
             convolvedFeaturesThis = pooledFeaturesThis = None
 
+    featuresFile = featuresFile.replace('.mat','.h5')
     if np.any(testImages):
-        sio.savemat(featuresFile, \
-                    {"pooledFeaturesTrain":pooledFeaturesTrain, \
-                     "pooledFeaturesTest":pooledFeaturesTest})
+        h5f = h5py.File(featuresFile, 'w')
+        h5f.create_dataset("pooledFeaturesTrain", data=pooledFeaturesTrain)
+        h5f.create_dataset("pooledFeaturesTest", data=pooledFeaturesTest)
+        h5f.close()
     else:
-        sio.savemat(featuresFile, \
-                    {"pooledFeaturesTrain":pooledFeaturesTrain})
+        h5f = h5py.File(featuresFile, 'w')
+        h5f.create_dataset("pooledFeaturesTrain", data=pooledFeaturesTrain)
+        h5f.close()
                  
 def train_linearSVM(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, save=True, prefix=""):
 
@@ -191,8 +193,6 @@ def train_linearSVM(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, 
         SVM = svm.SVC(kernel=kernel, C=C, probability=True)
         svmFile = "classifiers/%sSVM_%s_C%e_%s.pkl" % \
         (prefix, kernel, C, pooledFile.split("/")[-1].split(".")[0])
-
-    #SVM.fit(X, Y)
 
     try:
         SVM = pickle.load(open(svmFile, "rb"))
@@ -237,7 +237,6 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, sa
         (prefix, C, pooledFile.split("/")[-1].split(".")[0])
 
     try:
-        #SFC = pickle.load(open(sfcFile, "rb"))
         SFC = SoftMaxClassifier(saveFile=sfcFile)
         print "[*] trained classifier found."
         print "[*] trained classifier loaded."
@@ -247,19 +246,8 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, sa
         print "[+] classifier trained."
         if save:
             print "[+] saving classifier"
-            #pickle.dump(SFC, open(sfcFile, "wb"))
             SFC.saveNetwork(sfcFile)
 
-    #pred = SFC.predict(X.T)
-    
-    #acc = pred == Y.T
-    #acc = np.sum(acc)/float(np.shape(acc)[0])
-    #print 'Accuracy: %2.3f%%\n'% (acc * 100)
-    
-    #pred = SFC.predict(testX.T)
-    #acc = pred == testY.T
-    #acc = np.sum(acc)/float(np.shape(acc)[0])
-    #print 'Accuracy: %2.3f%%\n'% (acc * 100)
     pred = SFC.predict(testX.T).T
     indices = np.argmax(pred, axis=1)
     pred = np.max(pred, axis=1)
@@ -296,11 +284,6 @@ def train_SoftMaxOnline(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, s
             pickle.dump(SFC, open(sfcFile, "wb"))
 
     pred = SFC.predict_proba(testX)[:,1]
-    print np.shape(pred)
-    #indices = np.argmax(pred, axis=1)
-    #pred = np.max(pred, axis=1)
-    #pred[indices==0] = 1 - pred[indices==0]
-    #print np.shape(testY), np.shape(pred)
     fpr, tpr, thresholds = roc_curve(testY, pred)
     FoM = 1-tpr[np.where(fpr<=0.01)[0][-1]]
     print "[+] FoM: %.4f" % (FoM)
@@ -487,13 +470,20 @@ def main():
         pooledFeaturesTest = features["pooledFeaturesTest"]
         print "[*] convolved and pooled features loaded"
     except IOError:
-        print "[*] no convloved and pooled features found for %s" % dataFile.split("/")[-1]
-        print "[+] convolving and pooling..."
-        convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, \
+        try:
+            h5f = h5py.File(featuresFile.replace('.mat','.h5'),'r')
+            pooledFeaturesTrain = h5f["pooledFeaturesTrain"][:]
+            pooledFeaturesTest = h5f["pooledFeaturesTest"][:]
+            h5f.close()
+            print "[*] convolved and pooled features loaded"
+        except IOError:
+            print "[*] no convloved and pooled features found for %s" % dataFile.split("/")[-1]
+            print "[+] convolving and pooling..."
+            convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, \
                           numFeatures, stepSize)
-        features = sio.loadmat(featuresFile)
-        pooledFeaturesTrain = features["pooledFeaturesTrain"]
-        pooledFeaturesTest = features["pooledFeaturesTest"]
+            features = sio.loadmat(featuresFile)
+            pooledFeaturesTrain = features["pooledFeaturesTrain"]
+            pooledFeaturesTest = features["pooledFeaturesTest"]
         print "[+] Done."
 
     if cv == None:
@@ -517,9 +507,7 @@ def main():
         scaler = preprocessing.MinMaxScaler()
         scaler.fit(X.T)  # Don't cheat - fit only on training data
         X = scaler.transform(X.T)
-        #X = X.T
         Y = np.squeeze(trainLabels)
-        print Y
 
         testX = np.transpose(pooledFeaturesTest, (0,2,3,1))
         testX = np.reshape(testX, (int((pooledFeaturesTest.size)/float(numTestImages)), \
@@ -527,7 +515,6 @@ def main():
         # MinMax scaling removed 11-03-2015
         testX = scaler.transform(testX.T)
         testY = np.squeeze(testLabels)
-        print testY
 
         #train_linearSVM(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, \
         #                sgd, save=True, prefix="")
