@@ -1,14 +1,28 @@
-#import pickle
+import pickle
+import h5py
 import optparse
 import numpy as np
 import scipy.io as sio
 import scipy.signal as sig
+
 from sparseFilter import SparseFilter
 from NeuralNet import SoftMaxClassifier
 from SoftMaxOnline import SoftMaxOnline
 from sklearn import svm
 from sklearn.metrics import roc_curve
 from sklearn import preprocessing
+
+def one_percent_mdr(y, pred):
+    fpr, tpr, thresholds = roc_curve(y, pred)
+    FoM = fpr[np.where(1-tpr<=0.01)[0][0]] # FPR at 1% MDR
+    threshold = thresholds[np.where(1-tpr<=0.01)[0][0]]
+    return FoM, threshold
+
+def one_percent_fpr(y, pred):
+    fpr, tpr, thresholds = roc_curve(y, pred)
+    FoM = 1-tpr[np.where(fpr<=0.01)[0][-1]] # MDR at 1% FPR
+    threshold = thresholds[np.where(fpr<=0.01)[0][-1]]
+    return FoM, threshold
 
 def convolve(patchDim, numFeatures, images, W):
     m = np.shape(images)[3]
@@ -226,7 +240,7 @@ def train_linearSVM(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, 
 
     return FoM, threshold
 
-def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, save=True, prefix=""):
+def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, fom_func, sgd, save=True, prefix=""):
 
     if sgd:
         raise NotImplementedError
@@ -237,8 +251,9 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, sa
         (prefix, C, pooledFile.split("/")[-1].split(".")[0])
 
     try:
-        SFC = SoftMaxClassifier(saveFile=sfcFile)
         print "[*] trained classifier found."
+        #SFC = SoftMaxClassifier(X.T, Y, saveFile=sfcFile)
+        SFC = pickle.load(open(sfcFile, "rb"))
         print "[*] trained classifier loaded."
     except IOError:
         print "[*] Training Softmax Classifier with LAMBDA=%e" % (C)
@@ -246,19 +261,23 @@ def train_Softmax(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, sa
         print "[+] classifier trained."
         if save:
             print "[+] saving classifier"
-            SFC.saveNetwork(sfcFile)
+            SFC._input = None
+            SFC._targets = None
+            pickle.dump(SFC, open(sfcFile, "wb"))
+            #SFC.saveNetwork(sfcFile)
 
     pred = SFC.predict(testX.T).T
     indices = np.argmax(pred, axis=1)
     pred = np.max(pred, axis=1)
     pred[indices==0] = 1 - pred[indices==0]
-    
+    """
     fpr, tpr, thresholds = roc_curve(testY, pred)
     FoM = 1-tpr[np.where(fpr<=0.01)[0][-1]]
     print "[+] FoM: %.4f" % (FoM)
     threshold = thresholds[np.where(fpr<=0.01)[0][-1]]
     print "[+] threshold: %.4f" % (threshold)
-    
+    """
+    FoM, threshold = fom_func(testY, pred)
     return FoM, threshold
 
 def train_SoftMaxOnline(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, sgd, save=True, prefix=""):
@@ -292,13 +311,14 @@ def train_SoftMaxOnline(C, dataFile, X, Y, testX, testY, pooledFile, imageDim, s
     
     return FoM, threshold
 
-def cross_validate_Softmax(dataFile, X, Y, pooledFile, imageDim, sgd, save=True, n_folds=5):
+def cross_validate_Softmax(dataFile, X, Y, pooledFile, imageDim, fom_func, sgd, save=True, n_folds=5):
     
     from sklearn.cross_validation import KFold
     
     m = len(np.squeeze(Y))
-    CGrid = [0.1, 0.03, 0.01, 0.003, 0.001, 3e-4, 1e-4, 3e-5, 1e-5]
-    kf = KFold(m, n_folds=n_folds, indices=False)
+    CGrid = [0.1, 0.03]
+    #CGrid = [0.1, 0.03, 0.01, 0.003, 0.001, 3e-4, 1e-4, 3e-5, 1e-5]
+    kf = KFold(m, n_folds=n_folds)
     mean_FoMs = []
     for C in CGrid:
         fold = 1
@@ -307,7 +327,7 @@ def cross_validate_Softmax(dataFile, X, Y, pooledFile, imageDim, sgd, save=True,
             print "[+] training Softmax: LAMBDA : %e, fold : %d" % (C, fold)
             prefix = "cv/cv_fold%d" % fold
             FoM, threshold = train_Softmax(C, dataFile, X[train], Y[train], X[test], Y[test], \
-                                             pooledFile, imageDim, sgd, prefix=prefix)
+                                           pooledFile, imageDim, fom_func, sgd, save, prefix=prefix)
             FoMs.append(FoM)
             fold += 1
         mean_FoMs.append(np.mean(FoMs))
@@ -381,7 +401,8 @@ def main():
                                    "\t -V <cross validate>\n"+\
                                    "\t -n <maximum number of patches to use>\n"+\
                                    "\t -m <maximum number of iterations [default=100]>\n"+\
-                                   "\t -g <stochastic gradient decent>")
+                                   "\t -g <stochastic gradient decent>\n"+\
+                                   "\t -M <performance metric [default=mdr]>")
                                    
     parser.add_option("-F", dest="dataFile", type="string", \
                       help="specify data file to analyse")
@@ -409,7 +430,8 @@ def main():
                           help="specify the maximum number iterations [default=100]")
     parser.add_option("-g", action="store_true", dest="sgd", \
                       help="specify whether to use stochastic gradient decent [default=False]")
-
+    parser.add_option("-M", dest="fom", type="string", \
+                      help="specify which FoM use [default=mdr]")
 
     (options, args) = parser.parse_args()       
     
@@ -426,6 +448,7 @@ def main():
     numPatches = options.numPatches
     maxiter = options.maxiter
     sgd = options.sgd
+    fom = options.fom
     
     required_arguments = [dataFile, patchesFile, imageDim, imageChannels, \
                  patchDim, numFeatures, poolDim]
@@ -456,6 +479,14 @@ def main():
     
     if maxiter == None:
         maxiter = 100
+    
+    if fom == None or fom == "mdr":
+        fom_func = one_percent_mdr
+    elif fom == "fpr":
+        fom_func = one_percent_fpr
+    else:
+        fom_func = one_percent_mdr
+
     SF = get_sparseFilter(numFeatures, patches, patchesFile, maxiter=maxiter)
     W = np.reshape(SF.trainedW, (SF.k, SF.n), order="F")
     SF = None
@@ -481,9 +512,15 @@ def main():
             print "[+] convolving and pooling..."
             convolve_and_pool(dataFile, featuresFile, W, imageDim, patchDim, poolDim, \
                           numFeatures, stepSize)
-            features = sio.loadmat(featuresFile)
-            pooledFeaturesTrain = features["pooledFeaturesTrain"]
-            pooledFeaturesTest = features["pooledFeaturesTest"]
+            try:
+                features = sio.loadmat(featuresFile)
+                pooledFeaturesTrain = features["pooledFeaturesTrain"]
+                pooledFeaturesTest = features["pooledFeaturesTest"]
+            except IOError:
+                h5f = h5py.File(featuresFile.replace('.mat','.h5'),'r')
+                pooledFeaturesTrain = h5f["pooledFeaturesTrain"][:]
+                pooledFeaturesTest = h5f["pooledFeaturesTest"][:]
+                h5f.close()
         print "[+] Done."
 
     if cv == None:
@@ -543,7 +580,7 @@ def main():
                            
         #C = cross_validate_linearSVM(dataFile, X, Y, featuresFile, imageDim, sgd)
         #C = cross_validate_SoftMaxOnline(dataFile, X, Y, featuresFile, imageDim, sgd)
-        C = cross_validate_Softmax(dataFile, X, Y, featuresFile, imageDim, sgd)
+        C = cross_validate_Softmax(dataFile, X, Y, featuresFile, imageDim, fom_func, sgd, save=False)
 
         testX = np.transpose(pooledFeaturesTest, (0,2,3,1))
         testX = np.reshape(testX, (int((pooledFeaturesTest.size)/float(numTestImages)), \
@@ -557,8 +594,7 @@ def main():
         #train_SoftmaxOnline(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, \
         #                    sgd, save=True, prefix="")
         train_Softmax(C, dataFile, X, Y, testX, testY, featuresFile, imageDim, \
-                      sgd, save=True, prefix="")
-
+                      fom_func, sgd, save=True, prefix="")
 
 if __name__ == "__main__":
     main()
