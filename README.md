@@ -2,7 +2,7 @@
 
 Repository for Unsupervised Feature Learning and Deep Learning (UFLDL) code.
 
-## Sparse Filtering
+### Sparse Filtering
 
 Translation of sparse filtering from Matlab (https://github.com/jngiam/sparseFiltering) to python.
 
