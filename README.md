@@ -16,3 +16,7 @@ Algorithm publication available from http://papers.nips.cc/paper/4334-sparse-fil
 ### convolutional_sparseFiltering.py
 
 Implementation of a convolutional neural network with features learned from sparse filtering.
+
+### parallel_convolutional_sparseFiltering.py
+
+Parallelised version of the above.  Used for nightly processing of Pan-STARRS1 imaging.
